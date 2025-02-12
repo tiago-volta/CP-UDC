@@ -100,7 +100,6 @@ void print_buffer(struct buffer buffer) {
     printf("\n");
 }
 
-
 void *print_periodic (void *ptr) {
     struct args *args = ptr;
 
