@@ -101,32 +101,6 @@ void print_buffer(struct buffer buffer) {
 }
 
 
-/*si hacemos esto con solo un mutex sera mas eficiente porque solo hay un bloqueo en lugar d euno para cada posicion, por otro lado solo un thread puede cambiar el buffer a la vez, y actualmente mas de uno
-lo puede hacer
-void *print_periodic(void *ptr) {
-    struct args *args = ptr;
-
-    while (1) {
-        usleep(args->delay);
-
-        pthread_mutex_lock(&args->buffer->iterMutex);
-        if (args->buffer->stopIter) {  
-            pthread_mutex_unlock(&args->buffer->iterMutex);
-            break;
-        }
-        pthread_mutex_unlock(&args->buffer->iterMutex);
-
-        pthread_mutex_lock(&args->buffer->positionsMutexs[0]); 
-        printf("Buffer: ");
-        for (int i = 0; i < args->buffer->size; i++) {
-            printf("%d ", args->buffer->data[i]);
-        }
-        printf("\n");
-        pthread_mutex_unlock(&args->buffer->positionsMutexs[0]); 
-    }
-
-    return NULL;
-}*/
 void *print_periodic (void *ptr) {
     struct args *args = ptr;
 
