@@ -1,3 +1,11 @@
+/*
+* TITLE: Variables swap
+* SUBTITLE: Practical 1
+* AUTHOR 1: Tiago da Costa Teixeira Veloso e Volta LOGIN 1: tiago.velosoevolta
+* AUTHOR 2: Pablo Herrero Díaz  LOGIN 2: pablo.herrero.diaz
+* GROUP: 2.3
+* DATE: 13 / 02 / 2025
+*/
 #include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -9,7 +17,7 @@
 
 /*
  * swap.c:
- *   - Defines a 'buffer' structure that holds the data array, its size, and a mutex.
+ *   - Defines a 'buffer' structure that holds the data array, its size, a mutex and a boolean variable to stop the iterations.
  *   - Defines an 'args' structure used to pass parameters to threads.
  *   - The swap() function is executed by each swap thread and randomly exchanges values
  *     in the shared array.
@@ -18,40 +26,42 @@
  *     waits for them to finish, sorts and prints the final array.
  */
 
+// Structure representing a shared buffer
 struct buffer {
-    int *data;
-    int size;
-    pthread_mutex_t *positionsMutexs, iterMutex;    //Array de mutexs, tendremos un mutex por cada posición
-    bool stopIter;
+    int *data;  // array of integers
+    int size;  // size of the buffer
+    pthread_mutex_t *positionsMutexs;    // Array of mutexes, one for each position
+    pthread_mutex_t iterMutex;           // Mutex for iteration control
+    bool stopIter;                       // Flag to stop iterations
 };
 
+// Structure containing thread information
 struct thread_info {
     pthread_t       thread_id;        // id returned by pthread_create()
     int             thread_num;       // application defined thread #
 };
 
+// Structure containing arguments for each thread
 struct args {
     int				thread_num;       // application defined thread # (numero de hilo)
     int				delay;			  // delay between operations (en micro)
-    int				iterations;        // Número de intercambios que realizará el hilo
+    int				iterations;        // number of iterations
     struct buffer	*buffer;		  // Shared buffer
 };
 
+
+// Function executed by each thread, swapping elements in the shared buffer
 void *swap(void *ptr)
 {
     struct args *args =  ptr;
 
     while(args->iterations--) {
-        int i,j, tmp;
+        int i, j, tmp;
 
-        i=rand() % args->buffer->size;
-        j=rand() % args->buffer->size;
+        i = rand() % args->buffer->size;
+        j = rand() % args->buffer->size;
 
-        /*
-        * Evitamos el interbloqueo realizando una reserva ordenada de recursos
-        * así evitaremos una espera circular entre los threads.
-        */
-
+        // Avoid deadlock by acquiring resources in a consistent order
         if (i != j) {
             if (i < j) {
                 pthread_mutex_lock(&args->buffer->positionsMutexs[i]);
@@ -61,7 +71,7 @@ void *swap(void *ptr)
                 pthread_mutex_lock(&args->buffer->positionsMutexs[i]);
             }
         } else {
-            pthread_mutex_lock(&args->buffer->positionsMutexs[i]); // Bloquear solo una vez si i == j
+            pthread_mutex_lock(&args->buffer->positionsMutexs[i]); // Lock only once if i == j
         }
 
         printf("Thread %d swapping positions %d (== %d) and %d (== %d)\n",
@@ -85,13 +95,14 @@ void *swap(void *ptr)
     return NULL;
 }
 
-//Compare function for qsort
+// Comparison function for sorting
 int cmp(int *e1, int *e2) {
     if(*e1==*e2) return 0;
     if(*e1<*e2) return -1;
     return 1;
 }
 
+// Function to print the buffer content
 void print_buffer(struct buffer buffer) {
     int i;
 
@@ -100,6 +111,7 @@ void print_buffer(struct buffer buffer) {
     printf("\n");
 }
 
+// Function executed by the printer thread to periodically print the buffer
 void *print_periodic (void *ptr) {
     struct args *args = ptr;
 
@@ -107,21 +119,24 @@ void *print_periodic (void *ptr) {
         usleep(args->delay);
 
         pthread_mutex_lock(&args->buffer->iterMutex);
-        if (args->buffer->stopIter) {  // Revisamos si debemos detenernos
+        if (args->buffer->stopIter) {  // Check if we should stop
             pthread_mutex_unlock(&args->buffer->iterMutex);
             break;
         }
         pthread_mutex_unlock(&args->buffer->iterMutex);
 
+        //protects each position of the buffer with a mutex
         for (int i = 0; i < args->buffer->size; i++) {
-        	 pthread_mutex_lock(&args->buffer->positionsMutexs[i]);
+            pthread_mutex_lock(&args->buffer->positionsMutexs[i]);
         }
+        //prints every position in the buffer
         printf("Buffer: ");
         for (int i = 0; i < args->buffer->size; i++) {
-          printf("%d ", args->buffer->data[i]);
+            printf("%d ", args->buffer->data[i]);
         }
+        //unlocks every position in the buffer
         for (int i = 0; i < args->buffer->size; i++) {
-          pthread_mutex_unlock(&args->buffer->positionsMutexs[i]);
+            pthread_mutex_unlock(&args->buffer->positionsMutexs[i]);
         }
         printf("\n");
     }
@@ -129,37 +144,31 @@ void *print_periodic (void *ptr) {
     return NULL;
 }
 
-/*  Manejo del buffer y los hilos en swap.c:
-    Se inicializa el buffer con valores secuenciales (buffer.data[i] = i;).
-    Cada hilo accede aleatoriamente a posiciones del buffer e intercambia valores.
-    Se usa usleep(delay); para introducir retardos y simular concurrencia real.
-    Se espera a que todos los hilos terminen (pthread_join()).
-    Se ordena el buffer final con qsort() y se imprime.
-*/
-
+// Function to initialize and start threads
 void start_threads(struct options opt)
 {
-    int i;    //Auxiliary variable for loops
-    struct thread_info *threads;    //Pointer to an array of thread_info structures
-    struct args *args;    //Pointer to an array of arg structures
-    struct buffer buffer;    //Local variable that holds the shared data array and its size
+    int i;    // Auxiliary variable for loops
+    struct thread_info *threads;    // Pointer to an array of thread_info structures
+    struct args *args;    // Pointer to an array of arg structures
+    struct buffer buffer;    // Local variable that holds the shared data array and its size
 
     srand(time(NULL));
 
-    if((buffer.data=malloc(opt.buffer_size*sizeof(int)))==NULL) {    //Memory allocated for the buffer which is an integer array
+    if((buffer.data=malloc(opt.buffer_size*sizeof(int)))==NULL) {    // Memory allocated for the buffer which is an integer array
         printf("Out of memory\n");
         exit(1);
     }
-    buffer.size = opt.buffer_size;    //Store de buffer size in the local variables
+    buffer.size = opt.buffer_size;    // Store the buffer size in the local variables
     buffer.stopIter = false;
 
-    /* Reservar e inicializar el array de mutex para cada posición */
+    // Allocate and initialize the array of mutexes for each position
     buffer.positionsMutexs = malloc(buffer.size * sizeof(pthread_mutex_t));
     if (buffer.positionsMutexs == NULL) {
         printf("Out of memory for positions mutexes\n");
         free(buffer.data);
         exit(1);
     }
+    // Initialize buffer data and mutexes
     for (i = 0; i < buffer.size; i++) {
         buffer.data[i]=i;
         if (pthread_mutex_init(&buffer.positionsMutexs[i], NULL) != 0) {
@@ -175,8 +184,8 @@ void start_threads(struct options opt)
 
     printf("creating %d threads\n", opt.num_threads);
 
-    /*Allocate memory for the info structure of each thread and its respective arguments structure,
-    the last position will be the printer thread*/
+    // Allocate memory for the info structure of each thread and its respective arguments structure,
+    // the last position will be the printer thread
     threads = malloc(sizeof(struct thread_info) * (opt.num_threads + 1));
     args = malloc(sizeof(struct args) * (opt.num_threads + 1));
 
@@ -185,12 +194,11 @@ void start_threads(struct options opt)
         exit(1);
     }
 
-    //Initial buffer state
+    // Initial buffer state
     printf("Buffer before: ");
     print_buffer(buffer);
 
-    /* --- Create the printer thread (using the extra element) --- */
-
+    // Create the printer thread (using the extra element)
     // Initialize the printer thread's arguments.
     // Here we use the 'delay' field to hold the print interval (opt.print_wait).
     args[opt.num_threads].thread_num = opt.num_threads;  // Identifier for the printer thread
@@ -203,8 +211,7 @@ void start_threads(struct options opt)
         exit(1);
     }
 
-    /* --- Create the swap threads --- */
-
+    // Create the swap threads
     for (i = 0; i < opt.num_threads; i++) {
         threads[i].thread_num = i;
 
@@ -223,7 +230,7 @@ void start_threads(struct options opt)
     for (i = 0; i < opt.num_threads; i++)
         pthread_join(threads[i].thread_id, NULL);
 
-    // Señalar al hilo de impresión que debe terminar
+    // Signal the printer thread to stop
     pthread_mutex_lock(&buffer.iterMutex);
     buffer.stopIter = true;
     pthread_mutex_unlock(&buffer.iterMutex);
@@ -236,13 +243,14 @@ void start_threads(struct options opt)
 
     printf("iterations: %d\n", get_count());
 
+    //Frees
     free(args);
     free(threads);
     free(buffer.data);
 
     pthread_mutex_destroy(&buffer.iterMutex);
 
-    // Destruir los mutex y liberar memoria
+    // Destroy the mutexes and free memory
     for (i = 0; i < buffer.size; i++) {
         pthread_mutex_destroy(&buffer.positionsMutexs[i]);
     }
@@ -262,8 +270,10 @@ int main (int argc, char **argv)
     opt.delay       = 10;
     opt.print_wait  = 1;  // Default print interval: 1 microsecond
 
+    // Read options from command line arguments
     read_options(argc, argv, &opt);
 
+    // Start the thread operations
     start_threads(opt);
 
     exit (0);
